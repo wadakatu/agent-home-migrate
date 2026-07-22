@@ -207,6 +207,7 @@ def create_bundle(
             raise
 
         if age_recipient is None:
+            os.chmod(plain_bundle, 0o600)
             os.replace(plain_bundle, output)
         else:
             age = shutil.which("age")
@@ -228,6 +229,7 @@ def create_bundle(
                 )
             except subprocess.CalledProcessError as error:
                 raise MigrationError(f"age encryption failed with exit code {error.returncode}") from error
+            os.chmod(encrypted, 0o600)
             os.replace(encrypted, output)
     return manifest
 

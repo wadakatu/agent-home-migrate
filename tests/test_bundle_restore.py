@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import sqlite3
+import stat
 import tempfile
 import unittest
 import zipfile
@@ -54,6 +56,54 @@ class BundleRestoreTests(unittest.TestCase):
                 paths[("codex", "memories_1.sqlite")]["snapshot_method"],
                 "sqlite-online-backup",
             )
+
+    @unittest.skipUnless(os.name == "posix", "POSIX file modes are required")
+    def test_plaintext_bundle_is_owner_only_even_when_forced(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            bundle, _ = self._create(root)
+            self.assertEqual(stat.S_IMODE(bundle.stat().st_mode), 0o600)
+
+            bundle.chmod(0o644)
+            homes = make_agent_homes(root / "replacement-source")
+            create_bundle(
+                bundle,
+                scan_all(homes),
+                selected_categories=DEFAULT_INCLUDED_CATEGORIES,
+                provider_versions={"codex": "test", "claude": "test"},
+                force=True,
+            )
+            self.assertEqual(stat.S_IMODE(bundle.stat().st_mode), 0o600)
+
+    @unittest.skipUnless(os.name == "posix", "POSIX file modes are required")
+    def test_encrypted_bundle_is_owner_only_even_when_forced(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            homes = make_agent_homes(root / "source")
+            bundle = root / "state.ahm.zip.age"
+            bundle.write_bytes(b"old bundle")
+            bundle.chmod(0o644)
+
+            def fake_age(command: list[str], **_kwargs) -> None:
+                encrypted = Path(command[command.index("--output") + 1])
+                encrypted.write_bytes(b"encrypted bundle")
+                encrypted.chmod(0o644)
+
+            with mock.patch(
+                "agent_home_migrate.bundle.shutil.which", return_value="/usr/bin/age"
+            ), mock.patch(
+                "agent_home_migrate.bundle.subprocess.run", side_effect=fake_age
+            ):
+                create_bundle(
+                    bundle,
+                    scan_all(homes),
+                    selected_categories=DEFAULT_INCLUDED_CATEGORIES,
+                    provider_versions={"codex": "test", "claude": "test"},
+                    force=True,
+                    age_recipient="age1testrecipient",
+                )
+
+            self.assertEqual(stat.S_IMODE(bundle.stat().st_mode), 0o600)
 
     def test_restore_is_dry_run_by_default_then_applies_and_verifies(self) -> None:
         with tempfile.TemporaryDirectory() as temp_name:
