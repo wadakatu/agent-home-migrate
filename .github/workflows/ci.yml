@@ -39,6 +39,10 @@ jobs:
       - name: Verify CLI entry point
         run: ahm --version
 
+      - name: Verify installed version metadata
+        run: |
+          python -c 'from importlib.metadata import version; from agent_home_migrate import __version__; assert version("agent-home-migrate") == __version__'
+
       - name: Run tests
         run: python -m unittest discover -s tests -v
 

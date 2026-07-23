@@ -11,6 +11,7 @@ import zipfile
 from pathlib import Path
 from unittest import mock
 
+from agent_home_migrate import __version__
 from agent_home_migrate.bundle import MANIFEST_NAME, create_bundle, verify_bundle
 from agent_home_migrate.inventory import scan_all, scan_provider
 from agent_home_migrate.models import DEFAULT_INCLUDED_CATEGORIES
@@ -39,6 +40,10 @@ class BundleRestoreTests(unittest.TestCase):
             bundle, manifest = self._create(Path(temp_name))
             verified = verify_bundle(bundle)
             self.assertEqual(verified["bundle_id"], manifest["bundle_id"])
+            self.assertEqual(
+                manifest["created_by"],
+                {"name": "agent-home-migrate", "version": __version__},
+            )
             paths = {
                 (entry["provider"], entry["relative_path"]): entry
                 for entry in manifest["entries"]
