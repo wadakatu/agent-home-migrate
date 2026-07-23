@@ -185,6 +185,26 @@ ahm restore ~/Backups/agent-state.ahm.zip \
 ahm verify ~/Backups/agent-state.ahm.zip --target-root "$HOME"
 ```
 
+## Agent・自動化から使う
+
+すべてのサブコマンドは`--json`を受け付けます。成功時のreportはstdoutへ、
+コマンド解析後の実行時エラーはstderrへ次の形式で出力します。
+
+```json
+{
+  "error": {
+    "code": "migration_error",
+    "message": "..."
+  },
+  "ok": false
+}
+```
+
+終了コードは、`0`が成功、`2`が安全ガードを含む実行時エラーまたはCLI引数エラー、
+`3`がrestore conflictまたは復元結果の不一致、`130`が中断です。終了コード`3`では
+処理結果のJSON reportがstdoutへ出るため、agentは終了コードとreportの両方を確認してください。
+`--age-passphrase`は対話入力を行うため、自動化では`--age-identity`を使用します。
+
 ## パスが変わる場合
 
 本ツールは、未知のJSONL/SQLite形式を推測して書き換えません。ユーザー名や

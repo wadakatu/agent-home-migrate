@@ -117,6 +117,14 @@ Online Backupに失敗した場合はraw copyへフォールバックせず、ex
 明示的なstaging homeは対象外とし、検出不能でも続行する唯一の操作は
 `--allow-live` による明示承認とする。
 
+### Agent automation contract
+
+各サブコマンドの`--json`は、成功reportをstdoutへ出す。コマンド解析後に
+`MigrationError`または割り込みが発生した場合は、`ok: false`と安定したerror codeを持つ
+JSON envelopeをstderrへ出す。restore conflictや復元照合の不一致は、有効なreportを
+stdoutへ返したうえで終了コード3とする。これによりagentは人間向け文言の解析ではなく、
+出力stream、error code、process exit codeを組み合わせて判断できる。
+
 ## Version policy
 
 Codex/Claude Codeの保存形式は安定APIではない。bundleはsource versionを記録するが、

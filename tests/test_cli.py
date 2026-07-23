@@ -98,6 +98,66 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(main([*common, "--allow-plaintext-secrets"]), 0)
             self.assertTrue(bundle.exists())
 
+    def test_json_mode_formats_runtime_error_without_secret_values(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            homes = make_agent_homes(root / "source")
+            write(
+                homes["claude"] / "settings.json",
+                '{"env":{"ANTHROPIC_API_KEY":"must-not-be-printed"}}',
+            )
+            output = io.StringIO()
+            error = io.StringIO()
+
+            with contextlib.redirect_stdout(output), contextlib.redirect_stderr(error):
+                exit_code = main(
+                    [
+                        "--codex-home",
+                        str(homes["codex"]),
+                        "--claude-home",
+                        str(homes["claude"]),
+                        "export",
+                        "--output",
+                        str(root / "blocked.zip"),
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 2)
+            self.assertEqual(output.getvalue(), "")
+            report = json.loads(error.getvalue())
+            self.assertFalse(report["ok"])
+            self.assertEqual(report["error"]["code"], "migration_error")
+            self.assertIn("plaintext export blocked", report["error"]["message"])
+            self.assertNotIn("ANTHROPIC_API_KEY", error.getvalue())
+            self.assertNotIn("must-not-be-printed", error.getvalue())
+
+    def test_json_mode_formats_interrupt(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            homes = make_agent_homes(Path(temp_name))
+            error = io.StringIO()
+
+            with mock.patch(
+                "agent_home_migrate.cli.running_agent_processes",
+                side_effect=KeyboardInterrupt,
+            ), contextlib.redirect_stderr(error):
+                exit_code = main(
+                    [
+                        "--codex-home",
+                        str(homes["codex"]),
+                        "--claude-home",
+                        str(homes["claude"]),
+                        "doctor",
+                        "--json",
+                    ]
+                )
+
+            self.assertEqual(exit_code, 130)
+            report = json.loads(error.getvalue())
+            self.assertFalse(report["ok"])
+            self.assertEqual(report["error"]["code"], "interrupted")
+            self.assertEqual(report["error"]["message"], "interrupted")
+
     def test_doctor_reports_unknown_process_state(self) -> None:
         with tempfile.TemporaryDirectory() as temp_name:
             homes = make_agent_homes(Path(temp_name))

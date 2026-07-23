@@ -8,7 +8,7 @@ import shutil
 import sys
 from collections import Counter, defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, TextIO
 
 from . import __version__
 from .bundle import create_bundle, verify_bundle
@@ -43,8 +43,27 @@ def _homes(args: argparse.Namespace) -> dict[str, Path]:
     return result
 
 
-def _print_json(value: Any) -> None:
-    print(json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True))
+def _print_json(value: Any, *, file: TextIO | None = None) -> None:
+    print(
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True),
+        file=sys.stdout if file is None else file,
+    )
+
+
+def _print_runtime_error(code: str, message: str, *, json_mode: bool) -> None:
+    if json_mode:
+        _print_json(
+            {
+                "ok": False,
+                "error": {
+                    "code": code,
+                    "message": message,
+                },
+            },
+            file=sys.stderr,
+        )
+    else:
+        print(f"error: {message}", file=sys.stderr)
 
 
 def _bundle_summary(manifest: dict[str, Any]) -> dict[str, Any]:
@@ -488,11 +507,12 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
+    json_mode = bool(getattr(args, "json", False))
     try:
         return int(args.handler(args))
     except MigrationError as error:
-        print(f"error: {error}", file=sys.stderr)
+        _print_runtime_error("migration_error", str(error), json_mode=json_mode)
         return 2
     except KeyboardInterrupt:
-        print("error: interrupted", file=sys.stderr)
+        _print_runtime_error("interrupted", "interrupted", json_mode=json_mode)
         return 130
