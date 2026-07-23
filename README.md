@@ -42,6 +42,10 @@ ahm doctor
 ahm plan
 ```
 
+`doctor` は各agentのprocess stateを `running` / `stopped` / `unknown` で表示します。
+権限やsandbox制約で `ps` を実行できない場合は `unknown` として警告し、停止中とは
+みなしません。
+
 `plan` はパス、種別、サイズを集計します。例外として、既定でbundleへ含める
 `config.toml` / `*.config.toml` / `settings*.json` だけは構造として解析し、
 secret-capableなフィールド名と件数を値なしで報告します。セッション、memory、
@@ -53,6 +57,11 @@ secret-capableなフィールド名と件数を値なしで報告します。セ
 ```console
 ahm export --output ~/Backups/agent-state.ahm.zip
 ```
+
+デフォルトの `~/.codex` / `~/.claude` を扱う場合、agentが実行中、またはprocess stateを
+検出できないとexportは停止します。agentを終了して検出可能な環境から再実行してください。
+どうしても検出不能なsandbox内から続行する場合だけ、停止済みであることを別途確認して
+`--allow-live` を指定します。
 
 暗号化する場合:
 
@@ -111,6 +120,9 @@ ahm restore ~/Backups/agent-state.ahm.zip \
   --target-root "$HOME" \
   --apply
 ```
+
+デフォルトhomeへ適用するrestoreにも同じprocess state guardが適用されます。staging rootへの
+dry-runや適用はこのguardの対象外です。
 
 既存ファイルと内容が異なる場合、既定ではエラーになります。どうしても置き換える場合:
 

@@ -16,6 +16,12 @@ class Category(StrEnum):
     UNKNOWN = "unknown"
 
 
+class ProcessState(StrEnum):
+    RUNNING = "running"
+    STOPPED = "stopped"
+    UNKNOWN = "unknown"
+
+
 DEFAULT_INCLUDED_CATEGORIES = frozenset(
     {Category.CONFIG, Category.MEMORY, Category.SESSION, Category.STATE}
 )
@@ -74,4 +80,3 @@ class RestoreAction:
             "status": self.status,
             "reason": self.reason,
         }
-

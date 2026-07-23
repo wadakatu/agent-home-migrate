@@ -103,6 +103,14 @@ Online Backupに失敗した場合はraw copyへフォールバックせず、ex
 - ファイルは同一ディレクトリの一時ファイルからatomic rename
 - 途中失敗時は、このtransactionで作成・置換したファイルをロールバック
 
+### Live process safety
+
+`ps` によるprocess検出はagentごとに `running` / `stopped` / `unknown` を返す。
+`ps` の権限エラー、timeout、非ゼロ終了、実行不能を空のprocess一覧へ変換しない。
+デフォルトhomeへのexportと適用restoreは `running` と `unknown` のどちらでも停止する。
+明示的なstaging homeは対象外とし、検出不能でも続行する唯一の操作は
+`--allow-live` による明示承認とする。
+
 ## Version policy
 
 Codex/Claude Codeの保存形式は安定APIではない。bundleはsource versionを記録するが、
