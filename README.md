@@ -31,11 +31,12 @@ uv tool install .
 ahm doctor
 ```
 
-GitHubから直接インストールすることもできます。
+実際の移行では、旧PCと新PCが同じ実装を使うようにGitHub release tagを固定します。
 
 ```console
-uv tool install git+https://github.com/wadakatu/agent-home-migrate.git
-ahm doctor
+uv tool install 'git+https://github.com/wadakatu/agent-home-migrate.git@v0.2.0'
+ahm --version
+# 0.2.0
 ```
 
 `ahm`がPATHにないという警告が表示された場合は、`uv tool update-shell`を実行して
@@ -60,7 +61,7 @@ pipxを使う場合:
 ```console
 pipx install .
 # または
-pipx install git+https://github.com/wadakatu/agent-home-migrate.git
+pipx install 'git+https://github.com/wadakatu/agent-home-migrate.git@v0.2.0'
 ahm doctor
 ```
 
@@ -73,7 +74,18 @@ PYTHONPATH=src python3 -m agent_home_migrate plan
 
 ## クイックスタート
 
-### 1. 旧PCを診断する
+### 1. 旧PCでversionを確認する
+
+```console
+ahm --version
+# 0.2.0
+```
+
+表示されたversionを移行記録へ残します。新PCにも同じrelease tagをインストールし、
+exportとrestoreで異なるversionを混在させないでください。開発中のmain branchや
+tagを固定しないGit URLは実移行には使用しません。
+
+### 2. 旧PCを診断する
 
 ```console
 ahm doctor
@@ -95,7 +107,7 @@ secret-capableなフィールド名と件数を値なしで報告します。セ
 履歴の本文は読みません。除外ディレクトリは高速化のため一つのtreeとして集計します。
 全ファイルの分類を確認したい場合は `ahm plan --full` を使います。
 
-### 2. CodexとClaude Codeを終了してbundleを作る
+### 3. CodexとClaude Codeを終了してbundleを作る
 
 ```console
 ahm export --output ~/Backups/agent-state.ahm.zip
@@ -152,14 +164,24 @@ dotfilesまたは通常のソースリポジトリで別途管理してくださ
 `autoMemoryDirectory` が設定されている場合、現MVPは不完全なbundleを作らずexportを
 停止します。`doctor` と `plan` に理由が表示されます。
 
-### 3. bundleを検証する
+### 4. bundleを検証する
 
 ```console
 ahm inspect ~/Backups/agent-state.ahm.zip
 ahm verify ~/Backups/agent-state.ahm.zip
 ```
 
-### 4. 新PCでdry-runする
+### 5. 新PCへ同じversionをインストールする
+
+```console
+uv tool install 'git+https://github.com/wadakatu/agent-home-migrate.git@v0.2.0'
+ahm --version
+# 0.2.0
+```
+
+旧PCで記録したversionと一致しない場合はrestoreへ進みません。
+
+### 6. 新PCでdry-runする
 
 ```console
 ahm restore ~/Backups/agent-state.ahm.zip --target-root "$HOME"
@@ -187,7 +209,7 @@ ahm restore ~/Backups/agent-state.ahm.zip \
 
 置換前のファイルは `<target-root>/.agent-home-migrate-backups/<bundle-id>/` に残ります。
 
-### 5. 復元結果を照合する
+### 7. 復元結果を照合する
 
 ```console
 ahm verify ~/Backups/agent-state.ahm.zip --target-root "$HOME"
@@ -238,6 +260,7 @@ ahm restore agent-state.ahm.zip --target-root ~/migration-staging --apply
 - 災害復旧用の完全バックアップ: resticまたはTime Machine
 
 詳しい設計と脅威モデルは [docs/design.md](docs/design.md) を参照してください。
+maintainer向けのrelease手順は [docs/releasing.md](docs/releasing.md) にあります。
 
 ## テスト
 
