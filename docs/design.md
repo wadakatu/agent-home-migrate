@@ -117,6 +117,17 @@ Online Backupに失敗した場合はraw copyへフォールバックせず、ex
 明示的なstaging homeは対象外とし、検出不能でも続行する唯一の操作は
 `--allow-live` による明示承認とする。
 
+### Export preflight
+
+export sourceとして指定されたCodex/Claude homeは、両方が存在する通常のdirectoryであり、
+symlinkではないことを必須とする。このhome safety checkはoverride不可とし、欠落したhomeを
+空データとして扱うbundleや、意図しないsymlink先のexportを防ぐ。
+
+`doctor --json`は同じhome safety checkに加え、標準homeのprocess state、標準外データ保存先、
+secret-capable設定に対する`age`の有無を評価し、`export_preflight.ready`と構造化blockerを返す。
+これは危険なoverrideなしで安全なexportを開始するための前提条件を示し、出力先やrecipient
+など実際のexport引数の妥当性までは保証しない。
+
 ### Agent automation contract
 
 各サブコマンドの`--json`は、成功reportをstdoutへ出す。コマンド解析後に

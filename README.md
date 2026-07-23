@@ -84,6 +84,11 @@ ahm plan
 権限やsandbox制約で `ps` を実行できない場合は `unknown` として警告し、停止中とは
 みなしません。
 
+`doctor --json`の`export_preflight`は、危険なoverrideなしで安全なexportを開始できるかを
+`ready`と安定したblocker codeで返します。homeの欠落・symlink、標準homeを使うagentの
+実行中または検出不能、標準外のデータ保存先、暗号化が必要なのに`age`がない状態を
+blockerとして報告します。
+
 `plan` はパス、種別、サイズを集計します。例外として、既定でbundleへ含める
 `config.toml` / `*.config.toml` / `settings*.json` だけは構造として解析し、
 secret-capableなフィールド名と件数を値なしで報告します。セッション、memory、
@@ -100,6 +105,9 @@ ahm export --output ~/Backups/agent-state.ahm.zip
 検出できないとexportは停止します。agentを終了して検出可能な環境から再実行してください。
 どうしても検出不能なsandbox内から続行する場合だけ、停止済みであることを別途確認して
 `--allow-live` を指定します。
+
+source側のagent homeが存在しない、通常のdirectoryではない、またはsymlinkである場合は、
+空または意図しないbundleを防ぐため`--allow-live`の有無にかかわらずexportを停止します。
 
 暗号化する場合:
 

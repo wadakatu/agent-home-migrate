@@ -66,6 +66,91 @@ def _print_runtime_error(code: str, message: str, *, json_mode: bool) -> None:
         print(f"error: {message}", file=sys.stderr)
 
 
+def _home_safety_blockers(homes: dict[str, Path]) -> list[dict[str, str | None]]:
+    blockers: list[dict[str, str | None]] = []
+    for provider, home in homes.items():
+        if not home.exists():
+            blockers.append(
+                {
+                    "code": "home_missing",
+                    "provider": provider,
+                    "message": f"{provider} home does not exist: {home}",
+                }
+            )
+        elif not home.is_dir() or home.is_symlink():
+            blockers.append(
+                {
+                    "code": "home_unsafe",
+                    "provider": provider,
+                    "message": f"{provider} home is not a safe real directory: {home}",
+                }
+            )
+    return blockers
+
+
+def _export_preflight(
+    homes: dict[str, Path],
+    process_states: dict[str, ProcessState],
+    tools: dict[str, str | None],
+    secret_audit: SecretAudit,
+    location_warnings: list[str],
+) -> dict[str, Any]:
+    blockers = _home_safety_blockers(homes)
+    for provider, home in homes.items():
+        state = process_states[provider]
+        if not is_default_home(provider, home) or state == ProcessState.STOPPED:
+            continue
+        blockers.append(
+            {
+                "code": (
+                    "process_running"
+                    if state == ProcessState.RUNNING
+                    else "process_unknown"
+                ),
+                "provider": provider,
+                "message": (
+                    f"{provider} is running"
+                    if state == ProcessState.RUNNING
+                    else f"{provider} process state could not be determined"
+                ),
+            }
+        )
+    for warning in location_warnings:
+        blockers.append(
+            {
+                "code": "nonstandard_location",
+                "provider": None,
+                "message": warning,
+            }
+        )
+    requires_encryption = secret_audit.requires_plaintext_approval
+    if requires_encryption and tools.get("age") is None:
+        blockers.append(
+            {
+                "code": "age_unavailable",
+                "provider": None,
+                "message": (
+                    "secret-capable configuration requires encrypted export, but age "
+                    "is not installed"
+                ),
+            }
+        )
+    return {
+        "ready": not blockers,
+        "requires_encryption": requires_encryption,
+        "blockers": blockers,
+    }
+
+
+def _assert_safe_source_homes(homes: dict[str, Path]) -> None:
+    blockers = _home_safety_blockers(homes)
+    if blockers:
+        raise MigrationError(
+            "export source home safety check failed: "
+            + "; ".join(str(blocker["message"]) for blocker in blockers)
+        )
+
+
 def _bundle_summary(manifest: dict[str, Any]) -> dict[str, Any]:
     categories: dict[str, dict[str, dict[str, int]]] = defaultdict(
         lambda: defaultdict(lambda: {"entries": 0, "bytes": 0})
@@ -136,6 +221,10 @@ def command_doctor(args: argparse.Namespace) -> int:
             ),
             "free_bytes": free,
         }
+    location_warnings = nonstandard_location_warnings(homes)
+    export_preflight = _export_preflight(
+        homes, process_states, tools, secret_audit, location_warnings
+    )
     warnings: list[str] = []
     for name, data in providers.items():
         if not data["exists"]:
@@ -153,7 +242,7 @@ def command_doctor(args: argparse.Namespace) -> int:
         warnings.append("age is not installed; encrypted bundle operations are unavailable")
     if tools["cct"] is None:
         warnings.append("cct is not installed; path-changing session handoff is unavailable")
-    warnings.extend(nonstandard_location_warnings(homes))
+    warnings.extend(location_warnings)
     warnings.extend(secret_audit.warning_messages())
 
     report = {
@@ -163,6 +252,7 @@ def command_doctor(args: argparse.Namespace) -> int:
         "providers": providers,
         "tools": tools,
         "secret_config_audit": secret_audit.public_dict(),
+        "export_preflight": export_preflight,
         "warnings": warnings,
     }
     if args.json:
@@ -179,6 +269,10 @@ def command_doctor(args: argparse.Namespace) -> int:
         print("Optional tools:")
         for name in ("age", "cct", "restic", "chezmoi", "brew"):
             print(f"  {name}: {tools[name] or 'not installed'}")
+        print(
+            "Safe export preflight: "
+            + ("ready" if export_preflight["ready"] else "blocked")
+        )
         if warnings:
             print("Warnings:")
             for warning in warnings:
@@ -255,6 +349,7 @@ def _assert_agents_stopped(homes: dict[str, Path], allow_live: bool) -> None:
 
 def command_export(args: argparse.Namespace) -> int:
     homes = _homes(args)
+    _assert_safe_source_homes(homes)
     _assert_agents_stopped(homes, args.allow_live)
     secret_audit = audit_secret_capabilities(homes)
     if args.include_secrets and args.age_recipient is None and not args.allow_plaintext_secrets:
