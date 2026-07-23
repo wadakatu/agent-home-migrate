@@ -42,6 +42,19 @@ class ProfileTests(unittest.TestCase):
             Category.EPHEMERAL,
         )
 
+    def test_claude_2_1_runtime_and_marketplace_paths_are_classified(self) -> None:
+        cases = {
+            "sessions/process-123.json": Category.EPHEMERAL,
+            "telemetry/failed-events.json": Category.EPHEMERAL,
+            "plugins/.last_inuse_sweep": Category.EPHEMERAL,
+            "plugins/marketplaces/official/README.md": Category.EPHEMERAL,
+            "plugins/known_marketplaces.json": Category.CONFIG,
+            "projects/-repo/session-1.jsonl": Category.SESSION,
+        }
+        for path, category in cases.items():
+            with self.subTest(path=path):
+                self.assertEqual(classify("claude", path).category, category)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -56,3 +56,30 @@ def make_agent_homes(root: Path) -> dict[str, Path]:
     write(claude / "unclassified.dat", "unknown")
 
     return {"codex": codex, "claude": claude}
+
+
+def make_claude_2_1_home(root: Path) -> Path:
+    claude = root / ".claude"
+    write(
+        claude / "sessions/process-123.json",
+        '{"pid":123,"procStart":1,"status":"active","sessionId":"s1"}\n',
+    )
+    write(claude / "telemetry/failed-events.json", '{"events":[]}\n')
+    write(claude / "plugins/.last_inuse_sweep", "2026-07-23T00:00:00Z\n")
+    write(
+        claude / "plugins/marketplaces/official/.claude-plugin/marketplace.json",
+        '{"name":"official","plugins":[]}\n',
+    )
+    write(
+        claude / "plugins/marketplaces/official/.git/config",
+        '[remote "origin"]\nurl = https://example.invalid/marketplace.git\n',
+    )
+    write(
+        claude / "plugins/known_marketplaces.json",
+        '{"official":{"source":{"source":"github","repo":"example/plugins"}}}\n',
+    )
+    write(
+        claude / "projects/-repo/session-1.jsonl",
+        '{"type":"user","message":"keep this transcript"}\n',
+    )
+    return claude

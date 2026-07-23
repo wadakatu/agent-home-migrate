@@ -140,8 +140,14 @@ def classify_claude(path: str) -> Classification:
         return _result(Category.EPHEMERAL, "nested VCS metadata is not needed for restore")
     if lower in {".ds_store"} or lower.endswith(("-wal", "-shm", ".swp")):
         return _result(Category.EPHEMERAL, "temporary or SQLite sidecar file")
+    if path == "plugins/.last_inuse_sweep":
+        return _result(Category.EPHEMERAL, "plugin cleanup marker")
     if name.startswith(".last-") or name.startswith("security_warnings_state_"):
         return _result(Category.EPHEMERAL, "update or warning state")
+    if _under(path, "sessions"):
+        return _result(Category.EPHEMERAL, "live session process registry")
+    if _under(path, "telemetry"):
+        return _result(Category.EPHEMERAL, "telemetry spool")
     if _under(
         path,
         "cache",
@@ -156,7 +162,14 @@ def classify_claude(path: str) -> Classification:
         "distilled",
     ) or path == "stats-cache.json":
         return _result(Category.EPHEMERAL, "regenerable runtime data")
-    if _under(path, "plugins/cache", "plugins/repos", "plugins/data"):
+    if _under(path, "plugins/marketplaces"):
+        return _result(Category.EPHEMERAL, "regenerable marketplace checkout")
+    if _under(
+        path,
+        "plugins/cache",
+        "plugins/repos",
+        "plugins/data",
+    ):
         return _result(Category.EPHEMERAL, "plugin checkout, cache, or runtime data")
 
     parts = PurePosixPath(path).parts
