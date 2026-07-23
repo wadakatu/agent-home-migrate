@@ -248,7 +248,9 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 テストは一時ディレクトリ内の合成データだけを使い、実際の
 `~/.codex` / `~/.claude` には触れません。
 GitHub ActionsではPython 3.11と3.14について、UbuntuとmacOSの両方でパッケージを
-インストールし、CLI entry pointと同じテストスイートを検証します。
+インストールし、CLI entry pointと同じテストスイートを検証します。加えてUbuntu上で
+実際の`age-keygen`による鍵生成、`age`による暗号化・復号、staging rootへの復元と
+checksum照合までを通す統合テストを実行します。
 
 ## 参考仕様
 

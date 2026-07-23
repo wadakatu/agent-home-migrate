@@ -128,6 +128,14 @@ secret-capable設定に対する`age`の有無を評価し、`export_preflight.r
 これは危険なoverrideなしで安全なexportを開始するための前提条件を示し、出力先やrecipient
 など実際のexport引数の妥当性までは保証しない。
 
+### Encryption verification
+
+通常のテスト環境で`age`が利用できない場合、実CLIを使う統合テストは明示的にskipする。
+GitHub Actionsの専用jobでは`age`を導入し、鍵生成、暗号化bundle作成、identityによる
+検証・復号、staging rootへの復元、復元後checksum照合を一続きで実行する。
+専用jobは`AHM_REQUIRE_AGE=1`を設定し、`age`または`age-keygen`が見つからない状態を
+skipではなく失敗として扱う。
+
 ### Agent automation contract
 
 各サブコマンドの`--json`は、成功reportをstdoutへ出す。コマンド解析後に
