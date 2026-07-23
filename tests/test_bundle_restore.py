@@ -12,13 +12,13 @@ from pathlib import Path
 from unittest import mock
 
 from agent_home_migrate.bundle import MANIFEST_NAME, create_bundle, verify_bundle
-from agent_home_migrate.inventory import scan_all
+from agent_home_migrate.inventory import scan_all, scan_provider
 from agent_home_migrate.models import DEFAULT_INCLUDED_CATEGORIES
 from agent_home_migrate.restore import restore_bundle, verify_restored_target
 import agent_home_migrate.restore as restore_module
 from agent_home_migrate.util import MigrationError
 
-from helpers import make_agent_homes
+from helpers import make_agent_homes, make_claude_2_1_home
 
 
 class BundleRestoreTests(unittest.TestCase):
@@ -55,6 +55,26 @@ class BundleRestoreTests(unittest.TestCase):
             self.assertEqual(
                 paths[("codex", "memories_1.sqlite")]["snapshot_method"],
                 "sqlite-online-backup",
+            )
+
+    def test_export_keeps_claude_marketplace_metadata_not_runtime_clones(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            claude_home = make_claude_2_1_home(root / "source")
+            manifest = create_bundle(
+                root / "state.ahm.zip",
+                scan_provider("claude", claude_home),
+                selected_categories=DEFAULT_INCLUDED_CATEGORIES,
+                provider_versions={"claude": "2.1.test"},
+            )
+            paths = {entry["relative_path"] for entry in manifest["entries"]}
+
+            self.assertIn("plugins/known_marketplaces.json", paths)
+            self.assertIn("projects/-repo/session-1.jsonl", paths)
+            self.assertNotIn("sessions/process-123.json", paths)
+            self.assertNotIn("telemetry/failed-events.json", paths)
+            self.assertFalse(
+                any(path.startswith("plugins/marketplaces/") for path in paths)
             )
 
     @unittest.skipUnless(os.name == "posix", "POSIX file modes are required")

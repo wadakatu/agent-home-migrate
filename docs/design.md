@@ -45,6 +45,12 @@ bundle ─ verify ─ restore plan ─ explicit --apply ─ target homes
 memoryはsessionディレクトリの内側に置かれる場合があるため、実装では
 provider固有の例外を優先する。
 
+Claude Codeでは `projects/<project>/<session>.jsonl` をresumable transcriptとして保持する。
+一方、`sessions/` のprocess registry、`telemetry/`、plugin cleanup marker、
+`plugins/marketplaces/` のcloneは再生成可能なruntime dataとして除外する。
+`plugins/known_marketplaces.json` などの宣言的metadataはconfigとして保持し、marketplaceを
+新PCで再取得できる状態を残す。
+
 ### Secret-capability audit
 
 パス分類だけでは、既定で含める設定ファイル内の秘密値を検出できない。そのため

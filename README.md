@@ -89,12 +89,18 @@ ahm export \
 - 認証情報、OAuth lock
 - Codex worktrees、cache、logs、tmp
 - Claude cache、session-env、shell snapshot、plugin cache
+- Claude Codeのprocess registry、telemetry、marketplace checkout
 - 分類できなかったファイル
 
 `--include-secrets` は用意されていますが、通常は使わず新PCで再ログインしてください。
 使用する場合は `--age-recipient` が必須です。secret-capableな設定を含む平文bundleや、
 明示的に認証ファイルを含める平文bundleを、すでに暗号化されたローカルボリュームへ
 出力する特殊な場合だけ `--allow-plaintext-secrets` で解除できます。
+
+Claude Codeの `plugins/known_marketplaces.json` など、marketplaceを再登録するための
+宣言的metadataは保持しますが、`plugins/marketplaces/` 以下のcloneは再生成可能なため
+除外します。local-path marketplaceのsource自体はClaude home外の元ディレクトリを
+dotfilesまたは通常のソースリポジトリで別途管理してください。
 
 `CODEX_SQLITE_HOME` / `sqlite_home` が `CODEX_HOME` 外を指す場合や、Claude Codeの
 `autoMemoryDirectory` が設定されている場合、現MVPは不完全なbundleを作らずexportを
@@ -184,5 +190,7 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 - [Codex memories](https://learn.chatgpt.com/docs/customization/memories)
 - [Claude Code memory](https://code.claude.com/docs/en/memory)
 - [Claude Code sessions](https://code.claude.com/docs/en/sessions)
+- [Claude Code directory layout](https://code.claude.com/docs/en/claude-directory)
+- [Claude Code plugin marketplaces](https://code.claude.com/docs/en/plugin-marketplaces)
 - [Claude Code settings](https://code.claude.com/docs/en/settings)
 - [Claude Code environment variables](https://code.claude.com/docs/en/env-vars)
