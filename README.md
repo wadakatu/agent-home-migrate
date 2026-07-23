@@ -1,5 +1,7 @@
 # agent-home-migrate
 
+[![CI](https://github.com/wadakatu/agent-home-migrate/actions/workflows/ci.yml/badge.svg)](https://github.com/wadakatu/agent-home-migrate/actions/workflows/ci.yml)
+
 `agent-home-migrate` (`ahm`) は、Codex と Claude Code のローカル状態を、
 不要な worktree・cache・log・認証情報から分離して移行するためのCLIです。
 
@@ -217,6 +219,8 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 
 テストは一時ディレクトリ内の合成データだけを使い、実際の
 `~/.codex` / `~/.claude` には触れません。
+GitHub ActionsではPython 3.11と3.14について、UbuntuとmacOSの両方でパッケージを
+インストールし、CLI entry pointと同じテストスイートを検証します。
 
 ## 参考仕様
 
