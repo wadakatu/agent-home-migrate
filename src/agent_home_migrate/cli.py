@@ -17,6 +17,7 @@ from .locations import nonstandard_location_warnings
 from .models import Category, DEFAULT_INCLUDED_CATEGORIES, RestoreAction
 from .profiles import PROVIDERS
 from .restore import restore_bundle, verify_restored_target
+from .secret_audit import SecretAudit, audit_secret_capabilities
 from .util import (
     MigrationError,
     command_version,
@@ -79,8 +80,18 @@ def _print_category_summary(summary: dict[str, dict[str, dict[str, int]]]) -> No
             )
 
 
+def _print_secret_audit(audit: SecretAudit) -> None:
+    warnings = audit.warning_messages()
+    if not warnings:
+        return
+    print("Sensitive config audit:")
+    for warning in warnings:
+        print(f"  - {warning}")
+
+
 def command_doctor(args: argparse.Namespace) -> int:
     homes = _homes(args)
+    secret_audit = audit_secret_capabilities(homes)
     active = running_agent_processes()
     tools = selected_tool_status()
     providers: dict[str, Any] = {}
@@ -113,6 +124,7 @@ def command_doctor(args: argparse.Namespace) -> int:
     if tools["cct"] is None:
         warnings.append("cct is not installed; path-changing session handoff is unavailable")
     warnings.extend(nonstandard_location_warnings(homes))
+    warnings.extend(secret_audit.warning_messages())
 
     report = {
         "ahm_version": __version__,
@@ -120,6 +132,7 @@ def command_doctor(args: argparse.Namespace) -> int:
         "platform": platform.platform(),
         "providers": providers,
         "tools": tools,
+        "secret_config_audit": secret_audit.public_dict(),
         "warnings": warnings,
     }
     if args.json:
@@ -144,6 +157,7 @@ def command_doctor(args: argparse.Namespace) -> int:
 
 def command_plan(args: argparse.Namespace) -> int:
     homes = _homes(args)
+    secret_audit = audit_secret_capabilities(homes)
     prune = frozenset() if args.full else frozenset({Category.EPHEMERAL, Category.SECRET})
     items = scan_all(homes, prune_categories=prune)
     summary = summarize(items)
@@ -157,6 +171,7 @@ def command_plan(args: argparse.Namespace) -> int:
         "unknown_entries": unknown,
         "pruned_excluded_trees": not args.full,
         "location_warnings": nonstandard_location_warnings(homes),
+        "secret_config_audit": secret_audit.public_dict(),
     }
     if args.json:
         _print_json(report)
@@ -171,6 +186,7 @@ def command_plan(args: argparse.Namespace) -> int:
                 )
             if len(unknown) > 20:
                 print(f"  ... and {len(unknown) - 20} more; use --json for all paths")
+        _print_secret_audit(secret_audit)
     return 0
 
 
@@ -207,10 +223,23 @@ def _assert_agents_stopped(homes: dict[str, Path], allow_live: bool) -> None:
 def command_export(args: argparse.Namespace) -> int:
     homes = _homes(args)
     _assert_agents_stopped(homes, args.allow_live)
+    secret_audit = audit_secret_capabilities(homes)
     if args.include_secrets and args.age_recipient is None and not args.allow_plaintext_secrets:
         raise MigrationError(
             "--include-secrets requires --age-recipient; use "
             "--allow-plaintext-secrets only for an already encrypted local volume"
+        )
+    if (
+        secret_audit.requires_plaintext_approval
+        and args.age_recipient is None
+        and not args.allow_plaintext_secrets
+    ):
+        raise MigrationError(
+            "plaintext export blocked by sensitive config audit "
+            f"({len(secret_audit.findings)} secret-capable fields, "
+            f"{len(secret_audit.errors)} audit errors); run 'ahm plan' for field "
+            "patterns, then use --age-recipient, or --allow-plaintext-secrets only "
+            "for an already encrypted local volume"
         )
     location_warnings = nonstandard_location_warnings(homes)
     if location_warnings:
@@ -239,13 +268,20 @@ def command_export(args: argparse.Namespace) -> int:
     )
     summary = _bundle_summary(manifest)
     if args.json:
-        _print_json({"output": str(args.output), **summary})
+        _print_json(
+            {
+                "output": str(args.output),
+                **summary,
+                "secret_config_audit": secret_audit.public_dict(),
+            }
+        )
     else:
         print(f"Created: {args.output}")
         print(f"Bundle id: {summary['bundle_id']}")
         print(f"Entries: {summary['entries']}")
         print(f"Uncompressed payload: {human_size(summary['bytes'])}")
         _print_category_summary(summary["categories"])
+        _print_secret_audit(secret_audit)
     return 0
 
 
@@ -381,7 +417,14 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--output", type=_path, required=True)
     export.add_argument("--no-state", action="store_true", help="exclude mutable state DBs")
     export.add_argument("--include-secrets", action="store_true")
-    export.add_argument("--allow-plaintext-secrets", action="store_true")
+    export.add_argument(
+        "--allow-plaintext-secrets",
+        action="store_true",
+        help=(
+            "allow plaintext output containing credential files, secret-capable "
+            "config, or config that could not be audited"
+        ),
+    )
     export.add_argument("--include-unknown", action="store_true")
     export.add_argument("--include-ephemeral", action="store_true")
     export.add_argument("--age-recipient", help="encrypt output to this age recipient")

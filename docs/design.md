@@ -45,6 +45,20 @@ bundle ─ verify ─ restore plan ─ explicit --apply ─ target homes
 memoryはsessionディレクトリの内側に置かれる場合があるため、実装では
 provider固有の例外を優先する。
 
+### Secret-capability audit
+
+パス分類だけでは、既定で含める設定ファイル内の秘密値を検出できない。そのため
+`config.toml`、Codex profile config、Claude Codeの `settings*.json` に限り、標準ライブラリで
+構造解析する。監査対象は公式仕様上、値を直接保持できる既知フィールドに固定する。
+
+- Codex: MCP/model providerの `env`、HTTP header、bearer token、shell環境設定、OTEL header
+- Claude Code: `settings*.json` の `env`
+
+値や環境変数名、MCP server/providerの識別子は出力せず、正規化したフィールドpatternと
+entry件数だけを報告する。値の形式から秘密情報を推測したり、自動redactionしたりしない。
+設定が解析不能な場合も安全側に倒し、平文exportには暗号化または
+`--allow-plaintext-secrets` による明示承認を要求する。
+
 ### Bundle schema
 
 ZIPのルートには `manifest.json` と `payload/` だけを許可する。
