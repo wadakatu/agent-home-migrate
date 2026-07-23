@@ -7,6 +7,8 @@ import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 
+from .models import ProcessState
+
 
 BUFFER_SIZE = 1024 * 1024
 
@@ -71,8 +73,9 @@ def command_version(executable: str) -> str | None:
     return output[0] if output else "installed (version unavailable)"
 
 
-def running_agent_processes() -> set[str]:
-    """Best-effort process check. Failure yields an empty set, never a false block."""
+def running_agent_processes() -> dict[str, ProcessState]:
+    """Return process state without treating detection failure as stopped."""
+
     try:
         result = subprocess.run(
             ["ps", "-axo", "comm="],
@@ -82,13 +85,20 @@ def running_agent_processes() -> set[str]:
             timeout=5,
         )
     except (OSError, subprocess.SubprocessError):
-        return set()
-    found: set[str] = set()
+        return {
+            "codex": ProcessState.UNKNOWN,
+            "claude": ProcessState.UNKNOWN,
+        }
+    states = {
+        "codex": ProcessState.STOPPED,
+        "claude": ProcessState.STOPPED,
+    }
     for line in result.stdout.splitlines():
         base = Path(line.strip()).name.lower()
         if base in {"codex", "claude", "codex.app"} or base.startswith("codex"):
-            found.add("codex" if base.startswith("codex") else "claude")
-    return found
+            provider = "codex" if base.startswith("codex") else "claude"
+            states[provider] = ProcessState.RUNNING
+    return states
 
 
 def fast_tree_size(path: Path) -> int:

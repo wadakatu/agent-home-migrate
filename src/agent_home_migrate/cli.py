@@ -14,7 +14,7 @@ from . import __version__
 from .bundle import create_bundle, verify_bundle
 from .inventory import scan_all, summarize
 from .locations import nonstandard_location_warnings
-from .models import Category, DEFAULT_INCLUDED_CATEGORIES, RestoreAction
+from .models import Category, DEFAULT_INCLUDED_CATEGORIES, ProcessState, RestoreAction
 from .profiles import PROVIDERS
 from .restore import restore_bundle, verify_restored_target
 from .secret_audit import SecretAudit, audit_secret_capabilities
@@ -92,7 +92,7 @@ def _print_secret_audit(audit: SecretAudit) -> None:
 def command_doctor(args: argparse.Namespace) -> int:
     homes = _homes(args)
     secret_audit = audit_secret_capabilities(homes)
-    active = running_agent_processes()
+    process_states = running_agent_processes()
     tools = selected_tool_status()
     providers: dict[str, Any] = {}
     for spec in PROVIDERS:
@@ -102,13 +102,19 @@ def command_doctor(args: argparse.Namespace) -> int:
             free = shutil.disk_usage(disk_base).free
         except OSError:
             free = None
+        process_state = process_states[spec.name]
         providers[spec.name] = {
             "home": str(home),
             "exists": home.exists(),
             "is_directory": home.is_dir(),
             "is_symlink": home.is_symlink(),
             "version": tools[spec.executable],
-            "running": spec.name in active,
+            "process_state": process_state.value,
+            "running": (
+                None
+                if process_state == ProcessState.UNKNOWN
+                else process_state == ProcessState.RUNNING
+            ),
             "free_bytes": free,
         }
     warnings: list[str] = []
@@ -119,6 +125,11 @@ def command_doctor(args: argparse.Namespace) -> int:
             warnings.append(f"{name} home is not a safe real directory")
         if data["running"]:
             warnings.append(f"{name} appears to be running; quit it before export/restore")
+        elif data["process_state"] == ProcessState.UNKNOWN.value:
+            warnings.append(
+                f"{name} process state is unknown because process detection failed; "
+                "default-home export/restore requires --allow-live until detection works"
+            )
     if tools["age"] is None:
         warnings.append("age is not installed; encrypted bundle operations are unavailable")
     if tools["cct"] is None:
@@ -143,7 +154,8 @@ def command_doctor(args: argparse.Namespace) -> int:
         for name, data in providers.items():
             print(
                 f"{name}: home={data['home']} exists={data['exists']} "
-                f"running={data['running']} version={data['version'] or 'not installed'}"
+                f"process_state={data['process_state']} "
+                f"version={data['version'] or 'not installed'}"
             )
         print("Optional tools:")
         for name in ("age", "cct", "restic", "chezmoi", "brew"):
@@ -206,17 +218,19 @@ def _selected_categories(args: argparse.Namespace) -> frozenset[Category]:
 def _assert_agents_stopped(homes: dict[str, Path], allow_live: bool) -> None:
     if allow_live:
         return
-    active = running_agent_processes()
+    process_states = running_agent_processes()
     blocked = [
-        provider
+        f"{provider}={process_states[provider].value}"
         for provider, home in homes.items()
-        if provider in active and is_default_home(provider, home)
+        if is_default_home(provider, home)
+        and process_states[provider] != ProcessState.STOPPED
     ]
     if blocked:
         raise MigrationError(
-            "agent process appears to be running: "
+            "agent process safety check failed for default homes: "
             + ", ".join(blocked)
-            + "; quit it and retry, or use --allow-live at your own risk"
+            + "; quit the agents and retry where process detection works, or use "
+            "--allow-live at your own risk"
         )
 
 
@@ -428,7 +442,11 @@ def build_parser() -> argparse.ArgumentParser:
     export.add_argument("--include-unknown", action="store_true")
     export.add_argument("--include-ephemeral", action="store_true")
     export.add_argument("--age-recipient", help="encrypt output to this age recipient")
-    export.add_argument("--allow-live", action="store_true")
+    export.add_argument(
+        "--allow-live",
+        action="store_true",
+        help="continue when an agent is running or process detection is unavailable",
+    )
     export.add_argument("--force", action="store_true")
     export.add_argument("--json", action="store_true")
     export.set_defaults(handler=command_export)
@@ -448,7 +466,11 @@ def build_parser() -> argparse.ArgumentParser:
         default="fail",
     )
     restore.add_argument("--apply", action="store_true")
-    restore.add_argument("--allow-live", action="store_true")
+    restore.add_argument(
+        "--allow-live",
+        action="store_true",
+        help="continue when an agent is running or process detection is unavailable",
+    )
     restore.add_argument("--json", action="store_true")
     _add_decryption_flags(restore)
     restore.set_defaults(handler=command_restore)

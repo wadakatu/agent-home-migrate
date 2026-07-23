@@ -6,8 +6,10 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from agent_home_migrate.cli import main
+from agent_home_migrate.models import ProcessState
 
 from helpers import make_agent_homes, write
 
@@ -94,6 +96,129 @@ class CliTests(unittest.TestCase):
 
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(main([*common, "--allow-plaintext-secrets"]), 0)
+            self.assertTrue(bundle.exists())
+
+    def test_doctor_reports_unknown_process_state(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            homes = make_agent_homes(Path(temp_name))
+            common = [
+                "--codex-home",
+                str(homes["codex"]),
+                "--claude-home",
+                str(homes["claude"]),
+            ]
+            output = io.StringIO()
+
+            with mock.patch(
+                "agent_home_migrate.cli.running_agent_processes",
+                return_value={
+                    "codex": ProcessState.UNKNOWN,
+                    "claude": ProcessState.UNKNOWN,
+                },
+            ), contextlib.redirect_stdout(output):
+                self.assertEqual(main([*common, "doctor", "--json"]), 0)
+
+            report = json.loads(output.getvalue())
+            self.assertEqual(
+                report["providers"]["codex"]["process_state"], "unknown"
+            )
+            self.assertIsNone(report["providers"]["codex"]["running"])
+            self.assertTrue(
+                any(
+                    "process state is unknown" in warning
+                    for warning in report["warnings"]
+                )
+            )
+
+    def test_default_home_export_and_restore_fail_closed_on_unknown(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            homes = make_agent_homes(root / "source")
+            bundle = root / "bundle.ahm.zip"
+            target = root / "target"
+            common = [
+                "--codex-home",
+                str(homes["codex"]),
+                "--claude-home",
+                str(homes["claude"]),
+            ]
+            unknown = {
+                "codex": ProcessState.UNKNOWN,
+                "claude": ProcessState.UNKNOWN,
+            }
+
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    main(
+                        [
+                            *common,
+                            "export",
+                            "--output",
+                            str(bundle),
+                            "--allow-live",
+                        ]
+                    ),
+                    0,
+                )
+
+            error = io.StringIO()
+            with mock.patch(
+                "agent_home_migrate.cli.running_agent_processes", return_value=unknown
+            ), mock.patch(
+                "agent_home_migrate.cli.is_default_home", return_value=True
+            ), contextlib.redirect_stderr(error):
+                self.assertEqual(
+                    main([*common, "export", "--output", str(root / "blocked.zip")]),
+                    2,
+                )
+                self.assertEqual(
+                    main(
+                        [
+                            "restore",
+                            str(bundle),
+                            "--target-root",
+                            str(target),
+                            "--apply",
+                        ]
+                    ),
+                    2,
+                )
+
+            self.assertIn("codex=unknown", error.getvalue())
+            self.assertFalse((root / "blocked.zip").exists())
+            self.assertFalse((target / ".codex/config.toml").exists())
+
+    def test_allow_live_bypasses_unknown_process_detection(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_name:
+            root = Path(temp_name)
+            homes = make_agent_homes(root / "source")
+            bundle = root / "bundle.ahm.zip"
+            common = [
+                "--codex-home",
+                str(homes["codex"]),
+                "--claude-home",
+                str(homes["claude"]),
+            ]
+
+            with mock.patch(
+                "agent_home_migrate.cli.running_agent_processes",
+                side_effect=AssertionError("detection should be bypassed"),
+            ), mock.patch(
+                "agent_home_migrate.cli.is_default_home", return_value=True
+            ), contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(
+                    main(
+                        [
+                            *common,
+                            "export",
+                            "--output",
+                            str(bundle),
+                            "--allow-live",
+                        ]
+                    ),
+                    0,
+                )
+
             self.assertTrue(bundle.exists())
 
 
